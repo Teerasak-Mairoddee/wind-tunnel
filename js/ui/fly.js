@@ -5,7 +5,7 @@ import { sim } from '../solver/lbm.js';
 import { genAirfoil } from '../shape.js';
 
 const G = 9.81;
-const FLY_IDS = ['fMass', 'fSpan', 'fChord', 'fSpeed', 'fAlt', 'fSrc', 'fOwn'];
+const FLY_IDS = ['fMass', 'fSpan', 'fChord', 'fSpeed', 'fLen', 'fAlt', 'fSrc', 'fOwn'];
 const STORE_KEY = 'wt-fly';
 
 function setVerdict(cls, text) { const v = $('verdict'); v.className = 'verdict ' + cls; v.textContent = text; }
@@ -19,7 +19,7 @@ export function updateFly() {
   if (![m, b, c, V, cl2].every(isFinite) || m <= 0 || b <= 0 || c <= 0 || V <= 0) {
     setVerdict('', 'Check inputs'); $('flySummary').textContent = 'Enter a positive mass, span, chord and speed.'; return;
   }
-  drawPlanform(b, c, m);
+  drawPlanform(b, c, m, num('fLen'));
 
   const S = b * c, AR = b / c, cl3 = cl2 * AR / (AR + 2);      // finite-wing (tip loss) correction
   const W = m * G, L = 0.5 * rhoAir * V * V * S * cl3;
@@ -49,8 +49,8 @@ export function updateFly() {
   }
 }
 
-/** Bird's-eye view: wing to scale from span & chord, fuselage sized by mass. */
-function drawPlanform(b, c, mass) {
+/** Bird's-eye view: wing to scale from span & chord; fuselage from the given length, or estimated from mass. */
+function drawPlanform(b, c, mass, length) {
   const cv = $('planform'), W = cv.clientWidth, H = cv.clientHeight;
   if (!W || !H) return;
   const dpr = window.devicePixelRatio || 1;
@@ -59,9 +59,11 @@ function drawPlanform(b, c, mass) {
   const css = getComputedStyle(document.documentElement), col = n => css.getPropertyValue(n).trim();
   const ACC = col('--accent'), TXT = col('--text'), MUT = col('--muted'), LINE = col('--line');
 
-  // Fuselage volume scales with mass, so length and width grow with the cube root of mass.
-  // Calibrated to real aircraft: 2 kg RC plane ≈ 1.2 m, 1,100 kg light aircraft ≈ 9.8 m.
-  const fl = Math.max(0.95 * Math.cbrt(mass), 2.4 * c);    // never shorter than the wing root needs
+  // Use the real length when given. Otherwise estimate it: fuselage volume scales with mass,
+  // so length grows with the cube root of mass (2 kg RC plane ≈ 1.2 m, light aircraft ≈ 9.8 m),
+  // and it is never shorter than the wing root needs.
+  const real = length > 0;
+  const fl = real ? length : Math.max(0.95 * Math.cbrt(mass), 2.4 * c);
   const fw = 0.11 * fl;
   const hs = 0.34 * b, hc = 0.5 * c;                         // tailplane span & chord
   const padX = 58, padT = 26, padB = 44;
@@ -107,7 +109,7 @@ function drawPlanform(b, c, mass) {
   const fx = Math.min(wx, cx - r) - 10;                     // fuselage length
   x.strokeStyle = MUT; x.fillStyle = MUT;
   tick(fx, top, fx, top + L); tick(fx - 4, top, fx + 4, top); tick(fx - 4, top + L, fx + 4, top + L);
-  x.textAlign = 'right'; x.fillText(fl.toFixed(2) + ' m', fx - 6, top + L * 0.75); x.textAlign = 'left';
+  x.textAlign = 'right'; x.fillText(fl.toFixed(2) + ' m' + (real ? '' : ' est.'), fx - 6, top + L * 0.75); x.textAlign = 'left';
 
   // scale bar
   const target = (W * 0.22) / s, choices = [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 5, 10, 20];

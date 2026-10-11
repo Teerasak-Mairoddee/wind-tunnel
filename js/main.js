@@ -10,6 +10,7 @@ import { renderFlow, seedParticles, moveParticles, updateLegend } from './render
 import { updateStats, drawSpark } from './ui/stats.js';
 import { updateFly, syncFlyAoa, initFly } from './ui/fly.js';
 import { initHints } from './ui/hints.js';
+import { initAircraft } from './ui/aircraft.js';
 
 /* ---------- canvas sizing ---------- */
 function resize() {
@@ -119,6 +120,7 @@ $('resetBtn').onclick = restartFlow;
 $('pauseBtn').onclick = () => { app.paused = !app.paused; $('pauseBtn').textContent = app.paused ? 'Resume' : 'Pause'; };
 
 // panels
+initAircraft();
 initFly();
 initHints();
 

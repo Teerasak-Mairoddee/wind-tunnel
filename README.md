@@ -7,6 +7,7 @@ Design a wing (or draw any shape) and run a 2D computational fluid dynamics simu
 ## Features
 
 - **Wing editor**: NACA 4-digit airfoils with sliders for camber, camber position, thickness, angle of attack and chord, plus presets (0012, 2412, 4415, 6409).
+- **Famous aircraft**: load the real wing sections of the Cessna 172, Spitfire, DC-3, B-17, A6M Zero, P-39, Aeronca Champion and Air Tractor AT-301, including root and tip where they differ.
 - **Freehand drawing**: draw or erase directly in the tunnel, edit a generated wing by hand, or start from a cylinder, flat plate, square or wedge.
 - **Live wind tunnel**: velocity, vorticity and pressure views, with smoke streaklines.
 - **Stats**: lift coefficient (C<sub>L</sub>), drag coefficient (C<sub>D</sub>), L/D, Reynolds number, a C<sub>L</sub>/C<sub>D</sub> history chart, and solver speed.
@@ -32,10 +33,13 @@ js/
   render/
     editor.js           Editor view (grid + shape)
     flow.js             Flow view (colour maps, smoke particles, legend)
+  data/
+    aircraft.js         Wing sections of famous aircraft
   ui/
     stats.js            Stat tiles and C_L/C_D chart
     fly.js              "Will it fly?" panel and top-view drawing
     hints.js            "?" buttons and pop-up text
+    aircraft.js         Famous aircraft picker
 ```
 
 The solver modules have no DOM code, so they can be reused elsewhere, for example moved into a Web Worker or ported to WebGPU.

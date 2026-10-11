@@ -37,6 +37,25 @@ export function allocate() {
   sim.solid = new Uint8Array(N);
 }
 
+/* ---------- time-averaged coefficients ----------
+ * At these Reynolds numbers the wing sheds vortices, so lift swings up and down with a
+ * period of roughly 3 × NX steps. C_L and C_D are therefore a plain average over the last
+ * 6 × NX steps (about two swings), and the first 3 × NX steps after a start or a shape
+ * change are treated as start-up and left out of it.
+ */
+const RING = 8192;
+const ringCl = new Float64Array(RING), ringCd = new Float64Array(RING);
+let ringN = 0, ringI = 0, sumCl = 0, sumCd = 0;
+const avgWindow = () => Math.min(RING, 6 * NX);
+export const settleSteps = () => 3 * NX;
+
+function resetAverages() { ringN = ringI = 0; sumCl = sumCd = 0; }
+
+/** Fraction of the averaging window filled since the flow settled (0 while still settling). */
+export function averageProgress() {
+  return sim.steps - sim.shapeStep < settleSteps() ? 0 : ringN / avgWindow();
+}
+
 /**
  * Turn one step's body force into C_L / C_D and update the averages.
  * Shared by the CPU and GPU solvers.
@@ -45,8 +64,13 @@ export function recordForces(Fx, Fy) {
   sim.steps++;
   const dyn = 0.5 * sim.uIn * sim.uIn * sim.refLen;
   const cd = Fx / dyn, cl = -Fy / dyn;                            // y grows downward, so lift = -Fy
-  const a = sim.steps - sim.shapeStep < 200 ? 0.03 : 0.003;       // adapt fast after start or a shape change
-  sim.cdAvg += a * (cd - sim.cdAvg); sim.clAvg += a * (cl - sim.clAvg);
+  if (sim.steps - sim.shapeStep === settleSteps()) resetAverages();   // drop the start-up transient
+  const W = avgWindow();
+  if (ringN === W) { sumCl -= ringCl[ringI]; sumCd -= ringCd[ringI]; } else ringN++;
+  ringCl[ringI] = cl; ringCd[ringI] = cd; sumCl += cl; sumCd += cd;
+  ringI = (ringI + 1) % W;
+  sim.clAvg = sumCl / ringN; sim.cdAvg = sumCd / ringN;
+  sim.settled = sim.steps - sim.shapeStep >= settleSteps();
   if (sim.steps % 25 === 0) { sim.hist.push([sim.clAvg, sim.cdAvg]); if (sim.hist.length > 300) sim.hist.shift(); }
   if (!isFinite(Fx) || Math.abs(Fx) > 1e4 * (N / 64000)) sim.blown = true;
 }
@@ -66,7 +90,8 @@ export function initFlow() {
     for (let i = 0; i < 9; i++) f[i * N + k] = feq(i, 1, u, v);
     rho[k] = 1; ux[k] = u; uy[k] = v;
   }
-  sim.steps = 0; sim.shapeStep = 0; sim.clAvg = sim.cdAvg = 0; sim.hist.length = 0; sim.blown = false;
+  sim.steps = 0; sim.shapeStep = 0; sim.clAvg = sim.cdAvg = 0; sim.hist.length = 0; sim.blown = false; sim.settled = false;
+  resetAverages();
 }
 
 /**
@@ -82,7 +107,8 @@ export function solidChanged(oldSolid) {
       rho[k] = 1; ux[k] = uy[k] = 0;
     } else if (solid[k]) { ux[k] = uy[k] = 0; }
   }
-  sim.shapeStep = sim.steps;
+  sim.shapeStep = sim.steps; sim.settled = false;
+  resetAverages();
 }
 
 /** Advance the simulation by one time step. */

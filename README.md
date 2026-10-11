@@ -62,6 +62,12 @@ Airfoils are normalised by chord; drawn shapes by frontal height.
 
 "Will it fly?" uses the lift equation L = ½ρV²SC<sub>L</sub>, with the 2D C<sub>L</sub> scaled by AR / (AR + 2) to account for lift lost at the wingtips.
 
+C<sub>L</sub> can come from three places:
+
+- **Live simulation**: the tunnel's C<sub>L</sub>. At these Reynolds numbers the wing sheds vortices and lift swings up and down, so it is averaged over the last 6 × NX steps, after leaving out the first 3 × NX steps of start-up. It reads well below real-world values.
+- **Thin-airfoil theory**: C<sub>L</sub> = 2π(α − α₀), with α₀ from the NACA camber line, and a rough stall at C<sub>L</sub> 1.6. This is the standard estimate at real flight Reynolds numbers. Aircraft presets use it.
+- **My own value**: published airfoil data.
+
 ## Limitations
 
 Results are qualitative. The simulation is 2D, runs at low Reynolds numbers (hundreds to a few thousand, versus millions for real aircraft), and the grid is coarse. Use it to compare shapes and understand flow behaviour, not to certify a design.

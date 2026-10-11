@@ -135,6 +135,7 @@
       <div class="field"><label for="fSrc">Airfoil C<sub>L</sub> from</label>
         <select id="fSrc">
           <option value="sim">Live simulation</option>
+          <option value="theory">Thin-airfoil theory</option>
           <option value="own">My own value</option>
         </select>
       </div>
@@ -150,7 +151,7 @@
       <div class="stat"><small>Aspect ratio</small><b id="fAR">–</b></div>
       <div class="stat"><small>Min. flying speed</small><b id="fVmin">–</b></div>
     </div>
-    <p class="hint">Lift = ½ρV²SC<sub>L</sub>. A finite wing loses lift at its tips, so the 2D value is scaled by AR / (AR + 2). The simulation runs at a low Reynolds number and underestimates C<sub>L</sub>; for real-world numbers, pick “My own value” and enter published data for your airfoil.</p>
+    <p class="hint">Lift = ½ρV²SC<sub>L</sub>. A finite wing loses lift at its tips, so the 2D value is scaled by AR / (AR + 2). The tunnel runs at a far lower Reynolds number than real aircraft, so its C<sub>L</sub> reads low; for real-world answers pick “Thin-airfoil theory” (aircraft presets do this) or enter published data as “My own value”.</p>
   </section>
 </main>
 <footer>D2Q9 lattice Boltzmann · BGK collision with Smagorinsky sub-grid model · momentum-exchange forces</footer>

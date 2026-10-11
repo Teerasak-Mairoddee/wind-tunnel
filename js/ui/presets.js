@@ -36,6 +36,7 @@ function fillFly({ span, area, mass, cruise, length }) {
   set('fChord', +(area / span).toFixed(2));
   set('fSpeed', cruise);
   set('fLen', length);
+  set('fSrc', 'theory');            // real aircraft fly at Reynolds numbers far above the tunnel's
 }
 
 export function initPresets() {

@@ -1,7 +1,8 @@
 // "Will it fly?" panel: lift equation, 3D correction, verdict and the top-view drawing.
 import { $, fmt, bindOut } from '../dom.js';
 import { app } from '../state.js';
-import { sim } from '../solver/lbm.js';
+import { sim, averageProgress } from '../solver/lbm.js';
+import { thinAirfoilCl } from '../solver/theory.js';
 import { genAirfoil } from '../shape.js';
 
 const G = 9.81;
@@ -12,10 +13,12 @@ function setVerdict(cls, text) { const v = $('verdict'); v.className = 'verdict 
 
 export function updateFly() {
   const num = id => parseFloat($(id).value);
-  const own = $('fSrc').value === 'own';
+  const src = $('fSrc').value, own = src === 'own';
+  const theory = src === 'theory' && app.shapeSource === 'airfoil';   // theory needs a NACA wing
   $('fOwnWrap').hidden = !own;
   const m = num('fMass'), b = num('fSpan'), c = num('fChord'), V = num('fSpeed'), rhoAir = num('fAlt');
-  const cl2 = own ? num('fOwn') : sim.clAvg;
+  const th = theory ? thinAirfoilCl($('m').value / 100, $('p').value / 10, +$('aoa').value) : null;
+  const cl2 = own ? num('fOwn') : theory ? th.cl : sim.clAvg;
   if (![m, b, c, V, cl2].every(isFinite) || m <= 0 || b <= 0 || c <= 0 || V <= 0) {
     setVerdict('', 'Check inputs'); $('flySummary').textContent = 'Enter a positive mass, span, chord and speed.'; return;
   }
@@ -36,16 +39,36 @@ export function updateFly() {
   $('liftFill').style.background = L >= W ? 'var(--good)' : 'var(--accent2)';
   $('wMark').style.left = (W / scale * 100) + '%';
 
-  if (!own && sim.steps < 400) { setVerdict('', 'Settling…'); $('flySummary').textContent = 'Waiting for the flow to settle before judging.'; return; }
+  // Where C_L came from, so the verdict is never mistaken for something it isn't.
+  let basis;
+  if (own) basis = `Using your C<sub>L</sub> of ${cl2.toFixed(2)}.`;
+  else if (theory) basis = th.stalled
+    ? `At ${$('aoa').value}° this wing is past the stall, so lift drops to about C<sub>L</sub> ${cl2.toFixed(2)} (thin-airfoil theory with a rough stall estimate). Lower the angle.`
+    : `Using thin-airfoil theory: C<sub>L</sub> ${cl2.toFixed(2)} at ${$('aoa').value}°.`;
+  else {
+    if (src === 'theory') basis = 'Theory needs a Wing shape, so the tunnel’s C<sub>L</sub> is used. ';
+    else basis = '';
+    const prog = averageProgress();
+    if (prog === 0) {
+      setVerdict('', 'Settling…');
+      $('flySummary').innerHTML = basis + 'Waiting for the flow to settle before judging.';
+      return;
+    }
+    basis += `Using the tunnel’s average C<sub>L</sub> of ${cl2.toFixed(2)}${prog < 1 ? ` (averaging, ${Math.round(prog * 100)}%)` : ''}.`;
+  }
+  const say = t => { $('flySummary').innerHTML = `${t} ${basis}`; };
   if (cl3 <= 0) {
     setVerdict('bad', 'No lift');
-    $('flySummary').textContent = 'This shape produces no upward force here. Increase the angle of attack or add camber.';
+    say('This shape produces no upward force here. Increase the angle of attack or add camber.');
+  } else if (th && th.stalled) {
+    setVerdict('bad', 'Stalled');
+    say(L >= W ? 'Even stalled it would hold its weight, but it would be close to uncontrollable.' : `Lift is ${Math.round((1 - L / W) * 100)}% short of the weight.`);
   } else if (L >= W) {
     setVerdict('ok', 'It flies');
-    $('flySummary').textContent = `Lift is ${Math.round((L / W - 1) * 100)}% more than the weight. Level flight is possible from ${vmin.toFixed(1)} m/s upward.`;
+    say(`Lift is ${Math.round((L / W - 1) * 100)}% more than the weight. Level flight is possible from ${vmin.toFixed(1)} m/s upward.`);
   } else {
     setVerdict('bad', 'Not enough lift');
-    $('flySummary').textContent = `Lift is ${Math.round((1 - L / W) * 100)}% short of the weight. It needs ${vmin.toFixed(1)} m/s, a larger wing or a higher angle of attack.`;
+    say(`Lift is ${Math.round((1 - L / W) * 100)}% short of the weight. It needs ${vmin.toFixed(1)} m/s, a larger wing or a higher angle of attack.`);
   }
 }
 

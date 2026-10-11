@@ -22,18 +22,19 @@ function showInfo(p, filled = false) {
   const note = p.note ? ` (${p.note})` : '';
   const line2 = p.title.startsWith('NACA') ? p.about : `NACA ${p.naca}${where}${note}. ${p.about}`;
   const size = p.fly && filled
-    ? `<br>Will it fly? set to the ${p.fly.variant}: ${p.fly.span.toFixed(2)} m span, ${(p.fly.area / p.fly.span).toFixed(2)} m mean chord, ${p.fly.mass.toLocaleString()} kg.`
+    ? `<br>Will it fly? set to the ${p.fly.variant}: ${p.fly.span.toFixed(2)} m span, ${(p.fly.area / p.fly.span).toFixed(2)} m mean chord, ${p.fly.mass.toLocaleString()} kg, cruising at ${p.fly.cruise} m/s (${p.fly.cruiseText}).`
     : '';
   info.innerHTML = `<b>${p.title}</b> · ${p.role}<br>${line2}${size}`;
   info.hidden = false;
 }
 
-// Put the aircraft's real size into the "Will it fly?" inputs (input events save and redraw).
-function fillFly({ span, area, mass }) {
+// Put the aircraft's real size and cruise speed into the "Will it fly?" inputs (input events save and redraw).
+function fillFly({ span, area, mass, cruise }) {
   const set = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('input')); };
   set('fMass', mass);
   set('fSpan', span);
   set('fChord', +(area / span).toFixed(2));
+  set('fSpeed', cruise);
 }
 
 export function initPresets() {

@@ -188,12 +188,6 @@
     <p class="hint">Values are in lattice units and averaged over time. Treat them as qualitative: good for comparing shapes, not for certifying a design.</p>
   </section>
 
-  <!-- ============ LIVE SHAPE (shape tools move here while simulating) ============ -->
-  <section class="panel" id="livePanel" hidden>
-    <div class="fly-head"><div class="mini-label" id="lblLive" style="margin:0"><h2 style="font-size:16px;margin:0;color:var(--text)">Live shape</h2></div><span class="verdict ok">Flow running</span></div>
-    <p class="hint" style="margin:6px 0 12px">Changes apply instantly. Watch the wake and the C<sub>L</sub>/C<sub>D</sub> chart respond.</p>
-    <div id="liveSlot"></div>
-  </section>
   </div>
 
   <!-- ============ WILL IT FLY? ============ -->
@@ -203,6 +197,8 @@
     <div class="liftbar"><div id="liftFill"></div><div id="wMark"></div></div>
     <div class="barkey"><span>Lift <b id="fLift">–</b></span><span>Weight <b id="fWeight">–</b></span></div>
 
+    <div class="row" style="margin-top:14px"><label>Angle of attack <output id="o_fAoa"></output></label><input type="range" id="fAoa" min="-15" max="25" step="1" value="5"></div>
+    <p class="hint" id="fAoaNote" hidden>Angle control works on Wing shapes. Press Edit shape and pick the Wing tab to use it.</p>
     <div class="fly-grid">
       <div class="field"><label for="fMass">Aircraft mass (kg)</label><input type="number" id="fMass" min="0.01" step="0.1" value="2"></div>
       <div class="field"><label for="fSpan">Wingspan (m)</label><input type="number" id="fSpan" min="0.05" step="0.05" value="1.5"></div>
@@ -260,7 +256,7 @@ let shapeSource = 'airfoil', chordCells = 0, refLen = 1;
 const fmt = {
   m: v => v + '%', p: v => (v * 10) + '%', t: v => v + '%', aoa: v => v + '°',
   chord: v => v + '% of tunnel', brush: v => v + ' px',
-  speed: v => (+v).toFixed(3), visc: v => (+v).toFixed(3), spf: v => v
+  fAoa: v => v + '°', speed: v => (+v).toFixed(3), visc: v => (+v).toFixed(3), spf: v => v
 };
 function bindOut(id, cb) {
   const el = $(id), out = $('o_' + id);
@@ -341,7 +337,7 @@ function stroke(a, b) {
   shapeChanged();
 }
 view.addEventListener('pointerdown', e => {
-  if (tab !== 'draw') return;
+  if (mode !== 'edit' || tab !== 'draw') return;
   drawing = true; view.setPointerCapture(e.pointerId);
   last = toGrid(e); stroke(last, last);
 });
@@ -751,7 +747,7 @@ function startSim() {
   if (!buildSolid()) { showMsg('There is no shape in the tunnel yet. Draw something or pick a preset.'); setTimeout(() => showMsg(''), 2200); return; }
   mode = 'sim'; paused = false; $('pauseBtn').textContent = 'Pause';
   $('editPanel').hidden = true; $('simPanel').hidden = false; $('flyPanel').hidden = false;
-  $('liveSlot').appendChild($('shapeTools')); $('livePanel').hidden = false;
+  syncFlyAoa(); $('stage').classList.remove('drawing');
   document.body.classList.add('simming'); $('legend').classList.add('show'); $('flowtag').hidden = true;
   uIn = +$('speed').value; nu = +$('visc').value;
   initFlow(); seedParticles(); updateLegend(); updateStats(0);
@@ -760,7 +756,6 @@ function startSim() {
 function toEdit() {
   mode = 'edit'; showMsg('');
   $('editPanel').hidden = false; $('simPanel').hidden = true; $('flyPanel').hidden = true;
-  $('editPanel').insertBefore($('shapeTools'), $('runBtn')); $('livePanel').hidden = true;
   document.body.classList.remove('simming');
   $('legend').classList.remove('show'); $('flowtag').hidden = false;
   $('stage').classList.toggle('drawing', tab === 'draw');
@@ -794,6 +789,15 @@ document.querySelectorAll('#toolChips [data-tool]').forEach(b => b.onclick = () 
 $('clearBtn').onclick = () => { mctx.clearRect(0, 0, NX, NY); shapeSource = 'drawn'; shapeChanged(); };
 document.querySelectorAll('#shapePresets button').forEach(b => b.onclick = () => shapePreset(b.dataset.shape));
 $('runBtn').onclick = startSim;
+bindOut('fAoa', () => {                      // tilt the wing in the running simulation
+  $('aoa').value = $('fAoa').value; $('o_aoa').textContent = fmt.aoa($('aoa').value);
+  genAirfoil();
+});
+function syncFlyAoa() {
+  $('fAoa').value = $('aoa').value; $('o_fAoa').textContent = fmt.fAoa($('fAoa').value);
+  const ok = shapeSource === 'airfoil';
+  $('fAoa').disabled = !ok; $('fAoaNote').hidden = ok;
+}
 $('editBtn').onclick = toEdit;
 $('resetBtn').onclick = () => { initFlow(); seedParticles(); };
 $('pauseBtn').onclick = () => { paused = !paused; $('pauseBtn').textContent = paused ? 'Resume' : 'Pause'; };
@@ -801,7 +805,6 @@ $('viewSel').onchange = updateLegend;
 
 /* ================= HINTS ================= */
 const HINTS = {
-  lblLive: ['Live shape', 'Change the wing or draw on the tunnel while the air keeps flowing. The flow reacts straight away, and the averaged C<sub>L</sub>/C<sub>D</sub> catch up within a few hundred steps. Try sweeping the angle of attack slowly upward to find where lift stops rising: that is the stall.'],
   lblNaca: ['NACA presets', 'Classic wing sections. In “2412” the 2 is max camber (2%), the 4 is where it sits (40% back) and 12 is thickness (12% of chord). 0012 is symmetric and makes no lift at 0°; 4415 and 6409 are strongly curved high-lift sections.'],
   m: ['Max camber', 'How curved the wing is. More camber gives more lift at the same angle, and lift even at 0°, but adds drag and a nose-down twisting force. 0% is a symmetric wing.'],
   p: ['Camber position', 'Where the highest point of the curve sits along the wing. Forward (20–30%) gives a gentler stall; further back loads up the rear of the wing and increases the nose-down twisting force.'],
@@ -822,6 +825,7 @@ const HINTS = {
   speed: ['Wind speed', 'Inlet speed in simulation units. Faster raises the Reynolds number (more realistic, more turbulent). Above about 0.15 the method breaks down and can go unstable. C<sub>L</sub> and C<sub>D</sub> already account for speed.'],
   visc: ['Viscosity', 'How thick or sticky the fluid is. Lower values raise the Reynolds number, giving thinner boundary layers, vortex shedding and results closer to real flight, but may go unstable. Higher values make the flow syrupy and draggy.'],
   spf: ['Steps per frame', 'Simulation steps between screen updates. Higher gets to settled results faster but the animation gets choppier. It does not change the physics.'],
+  fAoa: ['Angle of attack', 'Tilts the wing in the running simulation, so you can watch lift and the verdict change live. Lift rises with angle until the stall (around 12–16° on real wings), then drops while drag jumps. Find the angle that just gives enough lift: that is your cruise angle at this speed.'],
   fMass: ['Aircraft mass', 'Total take-off mass, including battery or fuel and payload. Weight = mass × 9.81. Doubling mass needs about 41% more speed or twice the wing area.'],
   fSpan: ['Wingspan', 'Tip-to-tip length. A longer span adds area and raises aspect ratio, which reduces tip losses, so lift grows faster than span alone suggests.'],
   fChord: ['Wing chord', 'Front-to-back width of the wing. More chord adds area (more lift) but lowers aspect ratio, so more lift is lost at the tips.'],

@@ -25,7 +25,23 @@ let gpuPending = null;   // promise of the GPU run in flight, if any
 
 function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}'); } catch (e) { return {}; } }
 function savePrefs() {
-  try { localStorage.setItem(PREF_KEY, JSON.stringify({ solver: $('solverSel').value, res: $('resSel').value, smoke: $('smoke').value })); } catch (e) { /* ignore */ }
+  const p = { solver: $('solverSel').value, res: gpuSettings.res, spf: gpuSettings.spf, smoke: $('smoke').value };
+  try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch (e) { /* ignore */ }
+}
+
+// The CPU solver runs on the page's main thread, so CPU mode is held to safe settings:
+// the smallest grid and a low step count. GPU settings are remembered and restored.
+const CPU_LIMITS = { res: 'standard', spf: 10, spfMax: 15 };
+const GPU_SPF_MAX = 60;
+let gpuSettings = { res: 'high', spf: 30 };
+
+function setSpf(value, max) {
+  const el = $('spf');
+  el.max = max; el.value = Math.min(value, max);
+  el.dispatchEvent(new Event('input'));
+}
+function lockLargeGrids(locked) {
+  ['high', 'ultra'].forEach(k => { $('resSel').querySelector(`[value=${k}]`).disabled = locked; });
 }
 
 // The smoke amount slider is a GPU-only extra; the CPU solver keeps the default count.
@@ -38,7 +54,8 @@ function solverNote() {
   applySmoke();
   const where = useGpu ? `GPU (${gpu.adapterName})` : 'CPU';
   const missing = gpu ? '' : ' WebGPU isn’t available in this browser, so the CPU solver is used.';
-  $('solverNote').textContent = `Running on ${where} · ${NX} × ${NY} cells.${missing}`;
+  const limits = useGpu ? '' : ` CPU mode is limited to ${RESOLUTIONS[CPU_LIMITS.res].join(' × ')} and ${CPU_LIMITS.spfMax} steps per frame to keep the page responsive.`;
+  $('solverNote').textContent = `Running on ${where} · ${NX} × ${NY} cells.${missing}${limits}`;
 }
 
 // Solid cells for the GPU: 1 solid, 2 = was solid and has just opened up, 0 fluid.
@@ -137,7 +154,8 @@ async function applyResolution(key) {
   $('resSel').value = key;
   if (nx === NX && ny === NY) { solverNote(); return; }
   runGen++;
-  if (gpuPending) { try { await gpuPending; } catch (e) { /* ignore */ } }
+  // Only wait for an in-flight GPU batch if its buffers are about to be replaced.
+  if (useGpu && gpuPending) { try { await gpuPending; } catch (e) { /* ignore */ } }
   setGrid(nx, ny);
   allocate(); allocFlow(); resizeMask();
   if (app.shapeSource === 'airfoil') genAirfoil();       // rebuild the wing crisply at the new size
@@ -148,12 +166,20 @@ async function applyResolution(key) {
 }
 
 async function applySolver(kind) {
-  runGen++;
-  if (gpuPending) { try { await gpuPending; } catch (e) { /* ignore */ } }
+  runGen++;                                   // any GPU batch still in flight is ignored when it lands
   useGpu = kind === 'gpu' && !!gpu;
+  if (useGpu && gpuPending) { try { await gpuPending; } catch (e) { /* ignore */ } }
   $('solverSel').value = useGpu ? 'gpu' : 'cpu';
-  $('resSel').querySelector('[value=ultra]').disabled = !useGpu;   // too slow on the CPU
-  if (!useGpu && $('resSel').value === 'ultra') await applyResolution('high');
+  if (useGpu) {
+    const { res, spf } = gpuSettings;                     // copy first: setSpf fires input events
+    lockLargeGrids(false);
+    setSpf(spf, GPU_SPF_MAX);
+    await applyResolution(res);
+  } else {
+    lockLargeGrids(true);
+    setSpf(CPU_LIMITS.spf, CPU_LIMITS.spfMax);
+    await applyResolution(CPU_LIMITS.res);
+  }
   if (app.mode === 'sim') { rasterizeToSolid(); restartFlow(); }
   solverNote();
 }
@@ -214,14 +240,14 @@ initDrawing();
 // tunnel controls
 bindOut('speed', () => { sim.uIn = +$('speed').value; });
 bindOut('visc', () => { sim.nu = +$('visc').value; });
-bindOut('spf');
+bindOut('spf', () => { if (useGpu) { gpuSettings.spf = +$('spf').value; savePrefs(); } });
 bindOut('smoke', () => { applySmoke(); savePrefs(); });
 $('viewSel').onchange = updateLegend;
 $('editBtn').onclick = toEdit;
 $('resetBtn').onclick = restartFlow;
 $('pauseBtn').onclick = () => { app.paused = !app.paused; $('pauseBtn').textContent = app.paused ? 'Resume' : 'Pause'; };
 $('solverSel').onchange = () => { setSolver($('solverSel').value); savePrefs(); };
-$('resSel').onchange = () => { setResolution($('resSel').value).then(savePrefs); };
+$('resSel').onchange = () => { if (useGpu) gpuSettings.res = $('resSel').value; setResolution($('resSel').value).then(savePrefs); };
 
 // panels
 initPresets();
@@ -235,17 +261,15 @@ genAirfoil();
 // Start on the CPU, then switch to WebGPU as soon as it is ready.
 const prefs = loadPrefs();
 if (prefs.smoke) { $('smoke').value = prefs.smoke; $('o_smoke').textContent = fmt.smoke($('smoke').value); }   // restore without re-saving
+if (prefs.res) gpuSettings = { res: prefs.res, spf: +prefs.spf || 30 };
 $('solverSel').querySelector('[value=gpu]').disabled = true;
-$('resSel').querySelector('[value=ultra]').disabled = true;
-if (prefs.res && prefs.res !== 'ultra') setResolution(prefs.res);
+lockLargeGrids(true);                                    // CPU limits until the GPU is ready
+setSpf(CPU_LIMITS.spf, CPU_LIMITS.spfMax);
 solverNote();
 GpuSolver.create().then(g => {
   if (!g) { solverNote(); return; }
   gpu = g;
   $('solverSel').querySelector('[value=gpu]').disabled = false;
-  if (app.mode === 'sim') { solverNote(); return; }      // don't swap solvers under a running flow
-  if (prefs.solver === 'cpu') { setSolver('cpu'); return; }
+  if (app.mode === 'sim' || prefs.solver === 'cpu') { solverNote(); return; }   // don't swap solvers under a running flow
   setSolver('gpu');
-  if (!prefs.res) { $('spf').value = 30; $('spf').dispatchEvent(new Event('input')); }
-  setResolution(prefs.res || 'high');
 });

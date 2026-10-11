@@ -119,7 +119,7 @@ function drawPlanform(b, c, mass) {
 
   // aspect ratio class
   const AR = b / c;
-  const kind = AR < 4 ? 'stubby, agile' : AR < 8 ? 'typical RC / light aircraft' : AR < 15 ? 'efficient, long-range' : 'glider-like';
+  const kind = AR < 4 ? 'stubby, agile' : AR < 8 ? 'moderate, like most aircraft' : AR < 15 ? 'efficient, long-range' : 'glider-like';
   x.textAlign = 'right'; x.fillStyle = TXT; x.font = '600 12px system-ui,sans-serif';
   x.fillText('AR ' + AR.toFixed(1) + ' · ' + kind, W - 12, by);
   x.textAlign = 'left';

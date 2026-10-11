@@ -15,14 +15,25 @@ function applyNaca(naca) {
   ['m', 'p', 't'].forEach(id => $(id).dispatchEvent(new Event('input')));
 }
 
-function showInfo(p) {
+function showInfo(p, filled = false) {
   const info = $('presetInfo');
   if (!p) { info.hidden = true; return; }
   const where = p.part ? ` at the wing ${p.part}` : '';
   const note = p.note ? ` (${p.note})` : '';
   const line2 = p.title.startsWith('NACA') ? p.about : `NACA ${p.naca}${where}${note}. ${p.about}`;
-  info.innerHTML = `<b>${p.title}</b> · ${p.role}<br>${line2}`;
+  const size = p.fly && filled
+    ? `<br>Will it fly? set to the ${p.fly.variant}: ${p.fly.span.toFixed(2)} m span, ${(p.fly.area / p.fly.span).toFixed(2)} m mean chord, ${p.fly.mass.toLocaleString()} kg.`
+    : '';
+  info.innerHTML = `<b>${p.title}</b> · ${p.role}<br>${line2}${size}`;
   info.hidden = false;
+}
+
+// Put the aircraft's real size into the "Will it fly?" inputs (input events save and redraw).
+function fillFly({ span, area, mass }) {
+  const set = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('input')); };
+  set('fMass', mass);
+  set('fSpan', span);
+  set('fChord', +(area / span).toFixed(2));
 }
 
 export function initPresets() {
@@ -33,7 +44,8 @@ export function initPresets() {
     if (!sel.value) { showInfo(null); return; }
     const p = PRESETS[+sel.value];
     applyNaca(p.naca);
-    showInfo(p);
+    if (p.fly) fillFly(p.fly);
+    showInfo(p, true);
   });
 
   // Keep the dropdown in step with the sliders: stay on the chosen preset while it

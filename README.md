@@ -6,7 +6,7 @@ Design a wing (or draw any shape) and run a 2D computational fluid dynamics simu
 
 ## Features
 
-- **Wing editor**: NACA 4-digit airfoils with sliders for camber, camber position, thickness, angle of attack and chord, plus a presets menu with classic sections (0012, 2412, 4415, 6409) and the real wing sections of the Cessna 172, Spitfire, DC-3, B-17, A6M Zero, P-39, Aeronca Champion and Air Tractor AT-301, including root and tip where they differ.
+- **Wing editor**: NACA 4-digit airfoils with sliders for camber, camber position, thickness, angle of attack and chord, plus a presets menu with classic sections (0012, 2412, 4415, 6409) and the real wing sections of the Cessna 172, Spitfire, DC-3, B-17, A6M Zero, P-39, Aeronca Champion and Air Tractor AT-301, including root and tip where they differ. Aircraft presets also fill in the real mass, wingspan and mean chord in "Will it fly?".
 - **Freehand drawing**: draw or erase directly in the tunnel, edit a generated wing by hand, or start from a cylinder, flat plate, square or wedge.
 - **Live wind tunnel**: velocity, vorticity and pressure views, with smoke streaklines.
 - **Stats**: lift coefficient (C<sub>L</sub>), drag coefficient (C<sub>D</sub>), L/D, Reynolds number, a C<sub>L</sub>/C<sub>D</sub> history chart, and solver speed.

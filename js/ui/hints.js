@@ -3,8 +3,7 @@ import { $ } from '../dom.js';
 
 // Keyed by the id of the control (or label / result) the button sits next to.
 const HINTS = {
-  lblNaca: ['NACA presets', 'Classic wing sections. In “2412” the 2 is max camber (2%), the 4 is where it sits (40% back) and 12 is thickness (12% of chord). 0012 is symmetric and makes no lift at 0°; 4415 and 6409 are strongly curved high-lift sections.'],
-  aircraftSel: ['Famous aircraft', 'Loads the real wing section of a well-known aircraft. Many wings change section from root to tip: usually thick at the root for strength and thinner at the tip for less drag. Compare them in the tunnel to see how each design trades lift against drag. Only NACA 4-digit sections are listed, because that is what this tool can build.'],
+  presetSel: ['Presets', 'Classic NACA sections and the real wing sections of famous aircraft. In “2412” the 2 is max camber (2%), the 4 is where it sits (40% back) and 12 is thickness (12% of chord). Many aircraft change section from root to tip: thick at the root for strength, thinner at the tip for less drag. Only NACA 4-digit sections are listed, because that is what this tool can build.'],
   m: ['Max camber', 'How curved the wing is. More camber gives more lift at the same angle, and lift even at 0°, but adds drag and a nose-down twisting force. 0% is a symmetric wing.'],
   p: ['Camber position', 'Where the highest point of the curve sits along the wing. Forward (20–30%) gives a gentler stall; further back loads up the rear of the wing and increases the nose-down twisting force.'],
   t: ['Thickness', 'Thickest point as a % of chord. Thicker wings are stronger, stall more gently and reach higher max lift, but cost more drag. Thin wings are slippery but stall suddenly.'],

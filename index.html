@@ -32,16 +32,9 @@
     </div>
 
     <div id="airfoilCtl">
-      <div class="mini-label" id="lblNaca">Presets</div>
-      <div class="chips" id="nacaPresets">
-        <button data-naca="0012">NACA 0012</button>
-        <button data-naca="2412">2412</button>
-        <button data-naca="4415">4415</button>
-        <button data-naca="6409">6409</button>
-      </div>
-      <div class="row"><label for="aircraftSel">Famous aircraft</label>
-        <select id="aircraftSel"><option value="">Choose an aircraft…</option></select>
-        <p class="hint" id="aircraftInfo" hidden></p>
+      <div class="row"><label for="presetSel">Presets</label>
+        <select id="presetSel"><option value="">Custom</option></select>
+        <p class="hint" id="presetInfo" hidden></p>
       </div>
       <div class="row"><label>Max camber <output id="o_m"></output></label><input type="range" id="m" min="0" max="9" step="1" value="2"></div>
       <div class="row"><label>Camber position <output id="o_p"></output></label><input type="range" id="p" min="1" max="9" step="1" value="4"></div>

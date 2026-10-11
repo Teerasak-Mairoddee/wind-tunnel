@@ -10,7 +10,7 @@ import { renderFlow, seedParticles, moveParticles, updateLegend } from './render
 import { updateStats, drawSpark } from './ui/stats.js';
 import { updateFly, syncFlyAoa, initFly } from './ui/fly.js';
 import { initHints } from './ui/hints.js';
-import { initAircraft } from './ui/aircraft.js';
+import { initPresets } from './ui/presets.js';
 
 /* ---------- canvas sizing ---------- */
 function resize() {
@@ -96,11 +96,6 @@ function setTab(t) {
 bindOut('brush');
 $('tabAirfoil').onclick = () => setTab('airfoil');
 $('tabDraw').onclick = () => setTab('draw');
-document.querySelectorAll('#nacaPresets button').forEach(b => b.onclick = () => {
-  const n = b.dataset.naca;
-  $('m').value = n[0]; $('p').value = n[1] === '0' ? 4 : n[1]; $('t').value = +n.slice(2);
-  ['m', 'p', 't'].forEach(id => $(id).dispatchEvent(new Event('input')));
-});
 document.querySelectorAll('#toolChips [data-tool]').forEach(b => b.onclick = () => {
   app.tool = b.dataset.tool;
   document.querySelectorAll('#toolChips [data-tool]').forEach(x => x.classList.toggle('on', x === b));
@@ -120,7 +115,7 @@ $('resetBtn').onclick = restartFlow;
 $('pauseBtn').onclick = () => { app.paused = !app.paused; $('pauseBtn').textContent = app.paused ? 'Resume' : 'Pause'; };
 
 // panels
-initAircraft();
+initPresets();
 initFly();
 initHints();
 

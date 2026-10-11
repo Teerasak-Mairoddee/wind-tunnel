@@ -21,18 +21,7 @@ export function genAirfoil() {
   pts.forEach(([x, y], i) => i ? mctx.lineTo(x, y) : mctx.moveTo(x, y));
   mctx.closePath(); mctx.fill();
   app.shapeSource = 'airfoil';
-  markPresets();
   onChange();
-}
-
-/** Highlight the NACA preset chip that matches the sliders. */
-function markPresets() {
-  const code = $('m').value + $('p').value + String($('t').value).padStart(2, '0');
-  document.querySelectorAll('#nacaPresets button').forEach(b => {
-    const n = b.dataset.naca;
-    const match = n === code || (n[0] === '0' && $('m').value === '0' && n.slice(2) === code.slice(2));
-    b.classList.toggle('on', match);
-  });
 }
 
 /** Replace the mask with a reference shape. */

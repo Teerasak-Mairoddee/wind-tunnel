@@ -20,11 +20,12 @@
   header span{color:var(--muted);font-size:13px}
   main{max-width:1100px;margin:0 auto;padding:8px 16px 40px;display:grid;gap:14px}
   @media(min-width:900px){
-    main{grid-template-columns:1fr 330px}
-    .stage{grid-column:1;grid-row:1} #livePanel{grid-column:1;grid-row:2} #flyPanel{grid-column:1;grid-row:3}
-    #editPanel,#simPanel{grid-column:2;grid-row:1 / span 3}
+    main{grid-template-columns:1fr 330px;grid-template-rows:auto 1fr}
+    .stage{grid-column:1;grid-row:1} #flyPanel{grid-column:1;grid-row:2}
+    #side{grid-column:2;grid-row:1 / span 2}
   }
   .panel{align-self:start;min-width:0}
+  #side{display:grid;gap:14px;align-content:start;min-width:0}
   @media(max-width:899px){ body.simming .stage{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;box-shadow:0 8px 20px rgba(0,0,0,.45)} }
   .fly-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .fly-head h2{font-size:16px;margin:0}
@@ -107,6 +108,7 @@
     <div class="legend" id="legend"><span id="legLo"></span><div class="bar" id="legBar"></div><span id="legHi"></span></div>
   </section>
 
+  <div id="side">
   <!-- ============ SHAPE EDITOR ============ -->
   <section class="panel" id="editPanel">
     <div id="shapeTools">
@@ -153,12 +155,6 @@
     <button class="btn primary" id="runBtn">Run wind tunnel ▶</button>
   </section>
 
-  <!-- ============ LIVE SHAPE (shape tools move here while simulating) ============ -->
-  <section class="panel" id="livePanel" hidden>
-    <div class="fly-head"><div class="mini-label" id="lblLive" style="margin:0"><h2 style="font-size:16px;margin:0;color:var(--text)">Live shape</h2></div><span class="verdict ok">Flow running</span></div>
-    <p class="hint" style="margin:6px 0 12px">Changes apply instantly. Watch the wake and the C<sub>L</sub>/C<sub>D</sub> chart respond.</p>
-    <div id="liveSlot"></div>
-  </section>
 
   <!-- ============ SIMULATION PANEL ============ -->
   <section class="panel" id="simPanel" hidden>
@@ -191,6 +187,14 @@
     </div>
     <p class="hint">Values are in lattice units and averaged over time. Treat them as qualitative: good for comparing shapes, not for certifying a design.</p>
   </section>
+
+  <!-- ============ LIVE SHAPE (shape tools move here while simulating) ============ -->
+  <section class="panel" id="livePanel" hidden>
+    <div class="fly-head"><div class="mini-label" id="lblLive" style="margin:0"><h2 style="font-size:16px;margin:0;color:var(--text)">Live shape</h2></div><span class="verdict ok">Flow running</span></div>
+    <p class="hint" style="margin:6px 0 12px">Changes apply instantly. Watch the wake and the C<sub>L</sub>/C<sub>D</sub> chart respond.</p>
+    <div id="liveSlot"></div>
+  </section>
+  </div>
 
   <!-- ============ WILL IT FLY? ============ -->
   <section class="panel" id="flyPanel" hidden>

@@ -34,10 +34,17 @@ export function updateLegend() {
 }
 
 /* ---------- field image ---------- */
-const fieldCv = document.createElement('canvas'); fieldCv.width = NX; fieldCv.height = NY;
+const fieldCv = document.createElement('canvas');
 const fctx = fieldCv.getContext('2d');
-const fimg = fctx.createImageData(NX, NY);
-const curl = new Float32Array(N);
+let fimg, curl;
+
+/** (Re)allocate the colour image for the current grid size. */
+export function allocFlow() {
+  fieldCv.width = NX; fieldCv.height = NY;
+  fimg = fctx.createImageData(NX, NY);
+  curl = new Float32Array(N);
+}
+allocFlow();
 
 function renderField() {
   const { ux, uy, rho, solid } = sim;

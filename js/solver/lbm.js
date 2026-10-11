@@ -30,6 +30,27 @@ export const sim = {
 
 const P = new Float64Array(9);          // scratch: post-collision populations
 
+/** (Re)allocate every field for the current grid size. */
+export function allocate() {
+  sim.f = new Float32Array(9 * N); sim.g = new Float32Array(9 * N);
+  sim.rho = new Float32Array(N); sim.ux = new Float32Array(N); sim.uy = new Float32Array(N);
+  sim.solid = new Uint8Array(N);
+}
+
+/**
+ * Turn one step's body force into C_L / C_D and update the averages.
+ * Shared by the CPU and GPU solvers.
+ */
+export function recordForces(Fx, Fy) {
+  sim.steps++;
+  const dyn = 0.5 * sim.uIn * sim.uIn * sim.refLen;
+  const cd = Fx / dyn, cl = -Fy / dyn;                            // y grows downward, so lift = -Fy
+  const a = sim.steps - sim.shapeStep < 200 ? 0.03 : 0.003;       // adapt fast after start or a shape change
+  sim.cdAvg += a * (cd - sim.cdAvg); sim.clAvg += a * (cl - sim.clAvg);
+  if (sim.steps % 25 === 0) { sim.hist.push([sim.clAvg, sim.cdAvg]); if (sim.hist.length > 300) sim.hist.shift(); }
+  if (!isFinite(Fx) || Math.abs(Fx) > 1e4 * (N / 64000)) sim.blown = true;
+}
+
 export function feq(i, r, u, v) {
   const eu = EX[i] * u + EY[i] * v;
   return WT[i] * r * (1 + 3 * eu + 4.5 * eu * eu - 1.5 * (u * u + v * v));
@@ -117,13 +138,5 @@ export function step() {
     for (let i = 0; i < 9; i++) { g[i * N + k] = feq(i, 1, uIn, 0); g[i * N + ko] = g[i * N + ko - 1]; }
   }
   sim.f = g; sim.g = f;
-  sim.steps++;
-
-  // coefficients (y grows downward, so lift = -Fy)
-  const dyn = 0.5 * uIn * uIn * sim.refLen;
-  const cd = Fx / dyn, cl = -Fy / dyn;
-  const a = sim.steps - sim.shapeStep < 200 ? 0.03 : 0.003;     // adapt fast after start or a shape change
-  sim.cdAvg += a * (cd - sim.cdAvg); sim.clAvg += a * (cl - sim.clAvg);
-  if (sim.steps % 25 === 0) { sim.hist.push([sim.clAvg, sim.cdAvg]); if (sim.hist.length > 300) sim.hist.shift(); }
-  if (!isFinite(Fx) || Math.abs(Fx) > 1e4) sim.blown = true;
+  recordForces(Fx, Fy);
 }

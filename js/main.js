@@ -1,16 +1,45 @@
-// Entry point: switches between the shape editor and the running tunnel, and runs the main loop.
-import { NX, NY, N } from './config.js';
+// Entry point: switches between the shape editor and the running tunnel, picks the solver
+// (WebGPU when available, CPU otherwise) and runs the main loop.
+import { NX, NY, N, setGrid, RESOLUTIONS } from './config.js';
 import { $, bindOut, showMsg } from './dom.js';
 import { app } from './state.js';
-import { view } from './canvases.js';
-import { sim, step, initFlow, solidChanged } from './solver/lbm.js';
+import { view, resizeMask } from './canvases.js';
+import { sim, step, initFlow, solidChanged, allocate, recordForces } from './solver/lbm.js';
+import { GpuSolver } from './solver/gpu.js';
 import { genAirfoil, shapePreset, clearShape, initDrawing, onShapeChange, rasterizeToSolid } from './shape.js';
 import { drawEditor } from './render/editor.js';
-import { renderFlow, seedParticles, moveParticles, updateLegend } from './render/flow.js';
+import { renderFlow, seedParticles, moveParticles, updateLegend, allocFlow } from './render/flow.js';
 import { updateStats, drawSpark } from './ui/stats.js';
 import { updateFly, syncFlyAoa, initFly } from './ui/fly.js';
 import { initHints } from './ui/hints.js';
 import { initPresets } from './ui/presets.js';
+
+const UNSTABLE_MSG = 'The simulation went unstable. Raise the viscosity or lower the wind speed, then press Restart flow.';
+const PREF_KEY = 'wt-solver';
+
+/* ---------- solver choice ---------- */
+let gpu = null;          // GpuSolver once WebGPU is ready
+let useGpu = false;      // true while the GPU is the active solver
+let runGen = 0;          // bumped on every restart so late GPU results from an old run are dropped
+let gpuPending = null;   // promise of the GPU run in flight, if any
+
+function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}'); } catch (e) { return {}; } }
+function savePrefs() {
+  try { localStorage.setItem(PREF_KEY, JSON.stringify({ solver: $('solverSel').value, res: $('resSel').value })); } catch (e) { /* ignore */ }
+}
+
+function solverNote() {
+  const where = useGpu ? `GPU (${gpu.adapterName})` : 'CPU';
+  const missing = gpu ? '' : ' WebGPU isn’t available in this browser, so the CPU solver is used.';
+  $('solverNote').textContent = `Running on ${where} · ${NX} × ${NY} cells.${missing}`;
+}
+
+// Solid cells for the GPU: 1 solid, 2 = was solid and has just opened up, 0 fluid.
+function gpuFlags(oldSolid) {
+  const fl = new Uint32Array(N), s = sim.solid;
+  for (let k = 0; k < N; k++) fl[k] = s[k] ? 1 : (oldSolid && oldSolid[k] ? 2 : 0);
+  return fl;
+}
 
 /* ---------- canvas sizing ---------- */
 function resize() {
@@ -29,22 +58,56 @@ function applyLiveShape() {
   const old = sim.solid.slice();
   rasterizeToSolid();
   solidChanged(old);
+  if (useGpu) gpu.setFlags(gpuFlags(old));
   if (sim.blown) restartFlow();
 }
 
-function restartFlow() { initFlow(); seedParticles(); showMsg(''); }
+function restartFlow() {
+  runGen++;
+  initFlow();
+  if (useGpu) { gpu.resize(NX, NY); gpu.setFlags(gpuFlags(null)); gpu.init(sim.uIn, sim.nu); }
+  seedParticles(); showMsg('');
+}
 
 /* ---------- main loop ---------- */
 let perfMs = 0, perfSteps = 0, frameN = 0;
+
+function cpuSteps(n) {
+  const t0 = performance.now();
+  for (let s = 0; s < n && !sim.blown; s++) step();
+  perfMs += performance.now() - t0; perfSteps += n;
+  moveParticles(n);
+  if (sim.blown) showMsg(UNSTABLE_MSG);
+}
+
+async function gpuSteps(n) {
+  const gen = runGen, t0 = performance.now();
+  let res;
+  try { res = await (gpuPending = gpu.run(n, sim.uIn, sim.nu)); }
+  catch (e) { gpu.busy = false; if (gen === runGen) fallBackToCpu(e); return; }
+  finally { gpuPending = null; }
+  if (gen !== runGen || app.mode !== 'sim') return;     // a restart happened meanwhile
+  sim.rho.set(res.rho); sim.ux.set(res.ux); sim.uy.set(res.uy);
+  for (let s = 0; s < n && !sim.blown; s++) recordForces(res.forces[2 * s], res.forces[2 * s + 1]);
+  perfMs += performance.now() - t0; perfSteps += n;
+  moveParticles(n);
+  if (sim.blown) showMsg(UNSTABLE_MSG);
+}
+
+function fallBackToCpu(err) {
+  console.warn('GPU solver failed, switching to CPU:', err);
+  gpu = null; useGpu = false;
+  const opt = $('solverSel').querySelector('[value=gpu]'); opt.disabled = true;
+  setSolver('cpu');
+}
+
 function loop() {
   if (app.mode !== 'sim') return;
   if (liveDirty) applyLiveShape();
   if (!app.paused && !sim.blown) {
-    const n = +$('spf').value, t0 = performance.now();
-    for (let s = 0; s < n && !sim.blown; s++) step();
-    perfMs += performance.now() - t0; perfSteps += n;
-    moveParticles(n);
-    if (sim.blown) showMsg('The simulation went unstable. Raise the viscosity or lower the wind speed, then press Restart flow.');
+    const n = +$('spf').value;
+    if (useGpu) { if (!gpu.busy) gpuSteps(n); }
+    else cpuSteps(n);
   }
   renderFlow();
   if (++frameN % 6 === 0) {                     // refresh numbers ~10× per second
@@ -55,6 +118,41 @@ function loop() {
   }
   requestAnimationFrame(loop);
 }
+
+/* ---------- grid resolution / solver switching ---------- */
+// Grid and solver changes may wait for a GPU run to finish, so they are queued and
+// applied strictly one after another.
+let changes = Promise.resolve();
+const queueChange = fn => (changes = changes.then(fn).catch(e => console.warn(e)));
+
+async function applyResolution(key) {
+  const [nx, ny] = RESOLUTIONS[key];
+  $('resSel').value = key;
+  if (nx === NX && ny === NY) { solverNote(); return; }
+  runGen++;
+  if (gpuPending) { try { await gpuPending; } catch (e) { /* ignore */ } }
+  setGrid(nx, ny);
+  allocate(); allocFlow(); resizeMask();
+  if (app.shapeSource === 'airfoil') genAirfoil();       // rebuild the wing crisply at the new size
+  if (useGpu) gpu.resize(nx, ny);
+  resize();
+  if (app.mode === 'sim') { rasterizeToSolid(); restartFlow(); updateStats(0); liveDirty = false; }
+  solverNote();
+}
+
+async function applySolver(kind) {
+  runGen++;
+  if (gpuPending) { try { await gpuPending; } catch (e) { /* ignore */ } }
+  useGpu = kind === 'gpu' && !!gpu;
+  $('solverSel').value = useGpu ? 'gpu' : 'cpu';
+  $('resSel').querySelector('[value=ultra]').disabled = !useGpu;   // too slow on the CPU
+  if (!useGpu && $('resSel').value === 'ultra') await applyResolution('high');
+  if (app.mode === 'sim') { rasterizeToSolid(); restartFlow(); }
+  solverNote();
+}
+
+const setResolution = key => queueChange(() => applyResolution(key));
+const setSolver = kind => queueChange(() => applySolver(kind));
 
 /* ---------- modes ---------- */
 function startSim() {
@@ -69,12 +167,13 @@ function startSim() {
   $('stage').classList.remove('drawing');
   document.body.classList.add('simming'); $('legend').classList.add('show'); $('flowtag').hidden = true;
   sim.uIn = +$('speed').value; sim.nu = +$('visc').value;
-  restartFlow(); updateLegend(); updateStats(0); updateFly();
+  restartFlow(); updateLegend(); updateStats(0); updateFly(); solverNote();
   requestAnimationFrame(loop);
 }
 
 function toEdit() {
   app.mode = 'edit'; showMsg('');
+  runGen++;
   $('editPanel').hidden = false; $('simPanel').hidden = true; $('flyPanel').hidden = true;
   document.body.classList.remove('simming');
   $('legend').classList.remove('show'); $('flowtag').hidden = false;
@@ -113,6 +212,8 @@ $('viewSel').onchange = updateLegend;
 $('editBtn').onclick = toEdit;
 $('resetBtn').onclick = restartFlow;
 $('pauseBtn').onclick = () => { app.paused = !app.paused; $('pauseBtn').textContent = app.paused ? 'Resume' : 'Pause'; };
+$('solverSel').onchange = () => { setSolver($('solverSel').value); savePrefs(); };
+$('resSel').onchange = () => { setResolution($('resSel').value).then(savePrefs); };
 
 // panels
 initPresets();
@@ -122,3 +223,20 @@ initHints();
 window.addEventListener('resize', resize);
 resize();
 genAirfoil();
+
+// Start on the CPU, then switch to WebGPU as soon as it is ready.
+const prefs = loadPrefs();
+$('solverSel').querySelector('[value=gpu]').disabled = true;
+$('resSel').querySelector('[value=ultra]').disabled = true;
+if (prefs.res && prefs.res !== 'ultra') setResolution(prefs.res);
+solverNote();
+GpuSolver.create().then(g => {
+  if (!g) { solverNote(); return; }
+  gpu = g;
+  $('solverSel').querySelector('[value=gpu]').disabled = false;
+  if (app.mode === 'sim') { solverNote(); return; }      // don't swap solvers under a running flow
+  if (prefs.solver === 'cpu') { setSolver('cpu'); return; }
+  setSolver('gpu');
+  if (!prefs.res) { $('spf').value = 30; $('spf').dispatchEvent(new Event('input')); }
+  setResolution(prefs.res || 'high');
+});

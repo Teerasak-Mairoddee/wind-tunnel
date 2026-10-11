@@ -20,6 +20,8 @@ main{max-width:1100px;margin:0 auto;padding:8px 16px 40px;display:grid;gap:14px}
 .panel{align-self:start;min-width:0}
 #side{display:grid;gap:14px;align-content:start;min-width:0}
 @media(max-width:899px){ body.simming .stage{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;box-shadow:0 8px 20px rgba(0,0,0,.45)} }
+.row.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row.two > div{min-width:0}
 .fly-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .fly-head h2{font-size:16px;margin:0}
 .verdict{padding:4px 11px;border-radius:999px;font-weight:600;font-size:13px;background:var(--panel2);color:var(--muted)}

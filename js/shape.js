@@ -1,5 +1,5 @@
 // Shape editing: NACA generator, drawing tools, presets, and turning the mask into solid cells.
-import { NX, NY, SHAPE_COL } from './config.js';
+import { NX, NY, SHAPE_COL, cellScale } from './config.js';
 import { $ } from './dom.js';
 import { app } from './state.js';
 import { view, mctx } from './canvases.js';
@@ -31,7 +31,7 @@ export function shapePreset(kind) {
   const cx = NX * 0.25, cy = NY / 2, s = NY * 0.11;
   mctx.beginPath();
   if (kind === 'cylinder') mctx.arc(cx, cy, s, 0, Math.PI * 2);
-  if (kind === 'plate') mctx.rect(cx - 2, cy - s * 1.3, 4, s * 2.6);
+  if (kind === 'plate') { const w = 4 * cellScale(); mctx.rect(cx - w / 2, cy - s * 1.3, w, s * 2.6); }
   if (kind === 'square') mctx.rect(cx - s, cy - s, 2 * s, 2 * s);
   if (kind === 'wedge') { mctx.moveTo(cx - s * 1.6, cy); mctx.lineTo(cx + s * 1.4, cy - s); mctx.lineTo(cx + s * 1.4, cy + s); mctx.closePath(); }
   mctx.fill();
@@ -54,7 +54,7 @@ function stroke(a, b) {
   mctx.save();
   mctx.globalCompositeOperation = app.tool === 'erase' ? 'destination-out' : 'source-over';
   mctx.strokeStyle = mctx.fillStyle = SHAPE_COL;
-  mctx.lineWidth = +$('brush').value; mctx.lineCap = 'round';
+  mctx.lineWidth = +$('brush').value * cellScale(); mctx.lineCap = 'round';
   mctx.beginPath(); mctx.moveTo(a[0], a[1]); mctx.lineTo(b[0], b[1]); mctx.stroke();
   mctx.beginPath(); mctx.arc(b[0], b[1], mctx.lineWidth / 2, 0, Math.PI * 2); mctx.fill();
   mctx.restore();

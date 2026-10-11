@@ -11,6 +11,7 @@ Design a wing (or draw any shape) and run a 2D computational fluid dynamics simu
 - **Live wind tunnel**: velocity, vorticity and pressure views, with smoke streaklines.
 - **Stats**: lift coefficient (C<sub>L</sub>), drag coefficient (C<sub>D</sub>), L/D, Reynolds number, a C<sub>L</sub>/C<sub>D</sub> history chart, and solver speed.
 - **Will it fly?**: enter mass, wingspan, chord, airspeed and altitude to see whether the wing lifts the plane, its minimum flying speed, and a to-scale top view. An angle-of-attack slider tilts the wing in the running simulation.
+- **GPU acceleration**: runs on the graphics chip with WebGPU when the browser supports it, with grids up to 1200 × 480. Falls back to the CPU everywhere else.
 - **Hints**: every control and result has a "?" explaining what it does and how it changes the outcome.
 
 ## Project structure
@@ -28,7 +29,8 @@ js/
   shape.js              Wing generator, drawing tools, presets, mask → solid cells
   solver/
     airfoil.js          NACA 4-digit geometry (pure maths)
-    lbm.js              Lattice Boltzmann solver and force coefficients (no DOM)
+    lbm.js              Lattice Boltzmann solver (CPU) and force coefficients (no DOM)
+    gpu.js              The same solver as WebGPU compute shaders
   render/
     editor.js           Editor view (grid + shape)
     flow.js             Flow view (colour maps, smoke particles, legend)
@@ -41,11 +43,11 @@ js/
     presets.js          Presets dropdown
 ```
 
-The solver modules have no DOM code, so they can be reused elsewhere, for example moved into a Web Worker or ported to WebGPU.
+The solver modules have no DOM code, so they can be reused elsewhere.
 
 ## How it works
 
-The solver is a D2Q9 **lattice Boltzmann method** on a 400 × 160 grid:
+The solver is a D2Q9 **lattice Boltzmann method** on a 400 × 160, 800 × 320 or 1200 × 480 grid:
 
 - BGK collision with a Smagorinsky sub-grid model, so it stays stable at higher Reynolds numbers
 - Half-way bounce-back on solid cells (any drawn pixel becomes a wall)
@@ -53,6 +55,10 @@ The solver is a D2Q9 **lattice Boltzmann method** on a 400 × 160 grid:
 - Forces computed by the momentum-exchange method, then normalised into C<sub>L</sub> and C<sub>D</sub>
 
 Airfoils are normalised by chord; drawn shapes by frontal height.
+
+### GPU solver
+
+`js/solver/gpu.js` runs the same algorithm as WGSL compute shaders. Each frame it runs a batch of steps on the GPU (collide-and-stream, then inlet/outlet, then a reduction that sums the force on the body), and copies back the density and velocity fields for drawing plus one force sample per step. Results match the CPU solver to about five significant figures; the tiny difference comes from the order floating-point sums are added in. If WebGPU is missing or fails, the app switches to the CPU solver automatically.
 
 "Will it fly?" uses the lift equation L = ½ρV²SC<sub>L</sub>, with the 2D C<sub>L</sub> scaled by AR / (AR + 2) to account for lift lost at the wingtips.
 
@@ -79,7 +85,7 @@ Then open http://localhost:8000.
 
 ## Ideas for next steps
 
-- Move the solver to WebGPU for larger grids and faster runs
+- Draw the flow field on the GPU too, so very large grids don't need to copy data back each frame
 - Export the shape as an image or SVG, and import outlines from CAD
 - Show a surface pressure-distribution (C<sub>p</sub>) plot along the wing
 - Run an angle-of-attack sweep to plot a lift curve and find the stall angle

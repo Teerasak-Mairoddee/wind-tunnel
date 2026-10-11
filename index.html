@@ -21,10 +21,11 @@
   main{max-width:1100px;margin:0 auto;padding:8px 16px 40px;display:grid;gap:14px}
   @media(min-width:900px){
     main{grid-template-columns:1fr 330px}
-    .stage{grid-column:1;grid-row:1} #flyPanel{grid-column:1;grid-row:2}
-    #editPanel,#simPanel{grid-column:2;grid-row:1 / span 2}
+    .stage{grid-column:1;grid-row:1} #livePanel{grid-column:1;grid-row:2} #flyPanel{grid-column:1;grid-row:3}
+    #editPanel,#simPanel{grid-column:2;grid-row:1 / span 3}
   }
   .panel{align-self:start;min-width:0}
+  @media(max-width:899px){ body.simming .stage{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;box-shadow:0 8px 20px rgba(0,0,0,.45)} }
   .fly-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
   .fly-head h2{font-size:16px;margin:0}
   .verdict{padding:4px 11px;border-radius:999px;font-weight:600;font-size:13px;background:var(--panel2);color:var(--muted)}
@@ -108,6 +109,7 @@
 
   <!-- ============ SHAPE EDITOR ============ -->
   <section class="panel" id="editPanel">
+    <div id="shapeTools">
     <div class="tabs">
       <button id="tabAirfoil" class="on">Wing</button>
       <button id="tabDraw">Draw</button>
@@ -146,8 +148,16 @@
       </div>
       <p class="hint">Draw on the tunnel above. Your strokes edit the current shape; flow goes left to right.</p>
     </div>
+    </div>
 
     <button class="btn primary" id="runBtn">Run wind tunnel ▶</button>
+  </section>
+
+  <!-- ============ LIVE SHAPE (shape tools move here while simulating) ============ -->
+  <section class="panel" id="livePanel" hidden>
+    <div class="fly-head"><div class="mini-label" id="lblLive" style="margin:0"><h2 style="font-size:16px;margin:0;color:var(--text)">Live shape</h2></div><span class="verdict ok">Flow running</span></div>
+    <p class="hint" style="margin:6px 0 12px">Changes apply instantly. Watch the wake and the C<sub>L</sub>/C<sub>D</sub> chart respond.</p>
+    <div id="liveSlot"></div>
   </section>
 
   <!-- ============ SIMULATION PANEL ============ -->
@@ -287,7 +297,7 @@ function genAirfoil() {
   mctx.beginPath(); pts.forEach(([x, y], i) => i ? mctx.lineTo(x, y) : mctx.moveTo(x, y)); mctx.closePath(); mctx.fill();
   shapeSource = 'airfoil';
   markPresets();
-  drawEditor();
+  shapeChanged();
 }
 function markPresets() {
   const code = $('m').value + $('p').value + String($('t').value).padStart(2, '0');
@@ -309,7 +319,7 @@ function shapePreset(kind) {
   if (kind === 'wedge') { mctx.moveTo(cx - s * 1.6, cy); mctx.lineTo(cx + s * 1.4, cy - s); mctx.lineTo(cx + s * 1.4, cy + s); mctx.closePath(); }
   mctx.fill();
   shapeSource = 'drawn';
-  drawEditor();
+  shapeChanged();
 }
 let drawing = false, last = null;
 function toGrid(e) {
@@ -324,10 +334,10 @@ function stroke(a, b) {
   mctx.beginPath(); mctx.moveTo(a[0], a[1]); mctx.lineTo(b[0], b[1]); mctx.stroke();
   mctx.beginPath(); mctx.arc(b[0], b[1], mctx.lineWidth / 2, 0, Math.PI * 2); mctx.fill();
   mctx.restore();
-  drawEditor();
+  shapeChanged();
 }
 view.addEventListener('pointerdown', e => {
-  if (mode !== 'edit' || tab !== 'draw') return;
+  if (tab !== 'draw') return;
   drawing = true; view.setPointerCapture(e.pointerId);
   last = toGrid(e); stroke(last, last);
 });
@@ -369,7 +379,7 @@ const rho = new Float32Array(N), ux = new Float32Array(N), uy = new Float32Array
 const solid = new Uint8Array(N), curl = new Float32Array(N);
 const P = new Float64Array(9);
 let uIn = 0.1, nu = 0.012, steps = 0, paused = false, blown = false;
-let fx = 0, fy = 0, cdAvg = 0, clAvg = 0;
+let fx = 0, fy = 0, cdAvg = 0, clAvg = 0, shapeStep = 0, liveDirty = false;
 const hist = [];
 
 function feq(i, r, u, v) {
@@ -400,7 +410,7 @@ function initFlow() {
     for (let i = 0; i < 9; i++) f[i * N + k] = feq(i, 1, u, v);
     rho[k] = 1; ux[k] = u; uy[k] = v;
   }
-  steps = 0; cdAvg = clAvg = 0; hist.length = 0; blown = false;
+  steps = 0; shapeStep = 0; cdAvg = clAvg = 0; hist.length = 0; blown = false;
   showMsg('');
 }
 
@@ -457,7 +467,7 @@ function step() {
   fx = Fx; fy = Fy;
   const dyn = 0.5 * uIn * uIn * refLen;
   const cd = Fx / dyn, cl = -Fy / dyn;      // y grows downward, so lift = -Fy
-  const a = steps < 200 ? 0.05 : 0.003;
+  const a = steps - shapeStep < 200 ? 0.03 : 0.003;   // adapt fast after start or a shape change
   cdAvg += a * (cd - cdAvg); clAvg += a * (cl - clAvg);
   if (steps % 25 === 0) { hist.push([clAvg, cdAvg]); if (hist.length > 300) hist.shift(); }
   if (!isFinite(Fx) || Math.abs(Fx) > 1e4) blown = true;
@@ -693,6 +703,7 @@ FLY_IDS.forEach(id => $(id).addEventListener('input', () => {
 let perfAcc = 0, perfSteps = 0, frameN = 0;
 function loop() {
   if (mode !== 'sim') return;
+  if (liveDirty) applyLiveShape();
   if (!paused && !blown) {
     const n = +$('spf').value, t0 = performance.now();
     for (let s = 0; s < n && !blown; s++) step();
@@ -715,12 +726,29 @@ function updateLegend() {
   $('legLo').textContent = LEG[k][0]; $('legHi').textContent = LEG[k][1];
 }
 
+/* ================= LIVE SHAPE CHANGES ================= */
+function shapeChanged() { if (mode === 'edit') drawEditor(); else liveDirty = true; }
+function applyLiveShape() {
+  liveDirty = false;
+  const old = solid.slice();
+  buildSolid();
+  for (let k = 0; k < N; k++) {
+    if (old[k] && !solid[k]) {                      // newly opened cell: start it as still air
+      for (let i = 0; i < 9; i++) f[i * N + k] = WT[i];
+      rho[k] = 1; ux[k] = uy[k] = 0;
+    } else if (solid[k]) { ux[k] = uy[k] = 0; }
+  }
+  shapeStep = steps;
+  if (blown) { initFlow(); seedParticles(); }
+}
+
 /* ================= MODE SWITCHING ================= */
 function startSim() {
   if (!buildSolid()) { showMsg('There is no shape in the tunnel yet. Draw something or pick a preset.'); setTimeout(() => showMsg(''), 2200); return; }
   mode = 'sim'; paused = false; $('pauseBtn').textContent = 'Pause';
   $('editPanel').hidden = true; $('simPanel').hidden = false; $('flyPanel').hidden = false;
-  $('stage').classList.remove('drawing'); $('legend').classList.add('show'); $('flowtag').hidden = true;
+  $('liveSlot').appendChild($('shapeTools')); $('livePanel').hidden = false;
+  document.body.classList.add('simming'); $('legend').classList.add('show'); $('flowtag').hidden = true;
   uIn = +$('speed').value; nu = +$('visc').value;
   initFlow(); seedParticles(); updateLegend(); updateStats(0);
   requestAnimationFrame(loop);
@@ -728,6 +756,8 @@ function startSim() {
 function toEdit() {
   mode = 'edit'; showMsg('');
   $('editPanel').hidden = false; $('simPanel').hidden = true; $('flyPanel').hidden = true;
+  $('editPanel').insertBefore($('shapeTools'), $('runBtn')); $('livePanel').hidden = true;
+  document.body.classList.remove('simming');
   $('legend').classList.remove('show'); $('flowtag').hidden = false;
   $('stage').classList.toggle('drawing', tab === 'draw');
   drawEditor();
@@ -757,7 +787,7 @@ document.querySelectorAll('#toolChips [data-tool]').forEach(b => b.onclick = () 
   tool = b.dataset.tool;
   document.querySelectorAll('#toolChips [data-tool]').forEach(x => x.classList.toggle('on', x === b));
 });
-$('clearBtn').onclick = () => { mctx.clearRect(0, 0, NX, NY); shapeSource = 'drawn'; drawEditor(); };
+$('clearBtn').onclick = () => { mctx.clearRect(0, 0, NX, NY); shapeSource = 'drawn'; shapeChanged(); };
 document.querySelectorAll('#shapePresets button').forEach(b => b.onclick = () => shapePreset(b.dataset.shape));
 $('runBtn').onclick = startSim;
 $('editBtn').onclick = toEdit;
@@ -767,6 +797,7 @@ $('viewSel').onchange = updateLegend;
 
 /* ================= HINTS ================= */
 const HINTS = {
+  lblLive: ['Live shape', 'Change the wing or draw on the tunnel while the air keeps flowing. The flow reacts straight away, and the averaged C<sub>L</sub>/C<sub>D</sub> catch up within a few hundred steps. Try sweeping the angle of attack slowly upward to find where lift stops rising: that is the stall.'],
   lblNaca: ['NACA presets', 'Classic wing sections. In “2412” the 2 is max camber (2%), the 4 is where it sits (40% back) and 12 is thickness (12% of chord). 0012 is symmetric and makes no lift at 0°; 4415 and 6409 are strongly curved high-lift sections.'],
   m: ['Max camber', 'How curved the wing is. More camber gives more lift at the same angle, and lift even at 0°, but adds drag and a nose-down twisting force. 0% is a symmetric wing.'],
   p: ['Camber position', 'Where the highest point of the curve sits along the wing. Forward (20–30%) gives a gentler stall; further back loads up the rear of the wing and increases the nose-down twisting force.'],

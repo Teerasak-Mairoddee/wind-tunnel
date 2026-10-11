@@ -1,14 +1,14 @@
 // Entry point: switches between the shape editor and the running tunnel, picks the solver
 // (WebGPU when available, CPU otherwise) and runs the main loop.
 import { NX, NY, N, setGrid, RESOLUTIONS } from './config.js';
-import { $, bindOut, showMsg } from './dom.js';
+import { $, fmt, bindOut, showMsg } from './dom.js';
 import { app } from './state.js';
 import { view, resizeMask } from './canvases.js';
 import { sim, step, initFlow, solidChanged, allocate, recordForces } from './solver/lbm.js';
 import { GpuSolver } from './solver/gpu.js';
 import { genAirfoil, shapePreset, clearShape, initDrawing, onShapeChange, rasterizeToSolid } from './shape.js';
 import { drawEditor } from './render/editor.js';
-import { renderFlow, seedParticles, moveParticles, updateLegend, allocFlow } from './render/flow.js';
+import { renderFlow, seedParticles, moveParticles, updateLegend, allocFlow, setParticleCount, DEFAULT_PARTICLES } from './render/flow.js';
 import { updateStats, drawSpark } from './ui/stats.js';
 import { updateFly, syncFlyAoa, initFly } from './ui/fly.js';
 import { initHints } from './ui/hints.js';
@@ -25,10 +25,17 @@ let gpuPending = null;   // promise of the GPU run in flight, if any
 
 function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}'); } catch (e) { return {}; } }
 function savePrefs() {
-  try { localStorage.setItem(PREF_KEY, JSON.stringify({ solver: $('solverSel').value, res: $('resSel').value })); } catch (e) { /* ignore */ }
+  try { localStorage.setItem(PREF_KEY, JSON.stringify({ solver: $('solverSel').value, res: $('resSel').value, smoke: $('smoke').value })); } catch (e) { /* ignore */ }
+}
+
+// The smoke amount slider is a GPU-only extra; the CPU solver keeps the default count.
+function applySmoke() {
+  $('smokeRow').hidden = !useGpu;
+  setParticleCount(useGpu ? +$('smoke').value : DEFAULT_PARTICLES);
 }
 
 function solverNote() {
+  applySmoke();
   const where = useGpu ? `GPU (${gpu.adapterName})` : 'CPU';
   const missing = gpu ? '' : ' WebGPU isn’t available in this browser, so the CPU solver is used.';
   $('solverNote').textContent = `Running on ${where} · ${NX} × ${NY} cells.${missing}`;
@@ -208,6 +215,7 @@ initDrawing();
 bindOut('speed', () => { sim.uIn = +$('speed').value; });
 bindOut('visc', () => { sim.nu = +$('visc').value; });
 bindOut('spf');
+bindOut('smoke', () => { applySmoke(); savePrefs(); });
 $('viewSel').onchange = updateLegend;
 $('editBtn').onclick = toEdit;
 $('resetBtn').onclick = restartFlow;
@@ -226,6 +234,7 @@ genAirfoil();
 
 // Start on the CPU, then switch to WebGPU as soon as it is ready.
 const prefs = loadPrefs();
+if (prefs.smoke) { $('smoke').value = prefs.smoke; $('o_smoke').textContent = fmt.smoke($('smoke').value); }   // restore without re-saving
 $('solverSel').querySelector('[value=gpu]').disabled = true;
 $('resSel').querySelector('[value=ultra]').disabled = true;
 if (prefs.res && prefs.res !== 'ultra') setResolution(prefs.res);

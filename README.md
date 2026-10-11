@@ -11,7 +11,7 @@ Design a wing (or draw any shape) and run a 2D computational fluid dynamics simu
 - **Live wind tunnel**: velocity, vorticity and pressure views, with smoke streaklines.
 - **Stats**: lift coefficient (C<sub>L</sub>), drag coefficient (C<sub>D</sub>), L/D, Reynolds number, a C<sub>L</sub>/C<sub>D</sub> history chart, and solver speed.
 - **Will it fly?**: enter mass, wingspan, chord, airspeed and altitude to see whether the wing lifts the plane, its minimum flying speed, and a to-scale top view. An angle-of-attack slider tilts the wing in the running simulation.
-- **GPU acceleration**: runs on the graphics chip with WebGPU when the browser supports it, with grids up to 1200 × 480. Falls back to the CPU everywhere else.
+- **GPU acceleration**: runs on the graphics chip with WebGPU when the browser supports it, with grids up to 1200 × 480. Falls back to the CPU everywhere else. On the GPU you can also raise the amount of smoke, up to 30,000 particles.
 - **Hints**: every control and result has a "?" explaining what it does and how it changes the outcome.
 
 ## Project structure

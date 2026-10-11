@@ -5,7 +5,7 @@ export const $ = id => document.getElementById(id);
 export const fmt = {
   m: v => v + '%', p: v => (v * 10) + '%', t: v => v + '%', aoa: v => v + '°',
   chord: v => v + '% of tunnel', brush: v => v + ' px',
-  fAoa: v => v + '°', speed: v => (+v).toFixed(3), visc: v => (+v).toFixed(3), spf: v => v
+  fAoa: v => v + '°', smoke: v => (+v).toLocaleString() + ' particles', speed: v => (+v).toFixed(3), visc: v => (+v).toFixed(3), spf: v => v
 };
 
 // Keep a slider's <output> in sync and run cb on every change.

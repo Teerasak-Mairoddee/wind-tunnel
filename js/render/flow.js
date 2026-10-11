@@ -70,10 +70,23 @@ function renderField() {
 }
 
 /* ---------- smoke particles (released in lanes from the inlet) ---------- */
-const NP = 2400, LANES = 24, px = new Float32Array(NP), py = new Float32Array(NP);
+export const DEFAULT_PARTICLES = 2400;
+const MAX_PARTICLES = 30000;
+const px = new Float32Array(MAX_PARTICLES), py = new Float32Array(MAX_PARTICLES);
+let NP = DEFAULT_PARTICLES, LANES = 24;
 const laneY = i => ((i % LANES) + 0.5) * NY / LANES + (Math.random() - 0.5) * 0.6;
 
+/** Change how many smoke particles there are. More particles also means more smoke lanes. */
+export function setParticleCount(n) {
+  n = Math.max(100, Math.min(MAX_PARTICLES, Math.round(n)));
+  if (n === NP) return;
+  NP = n;
+  LANES = Math.max(8, Math.min(Math.round(Math.sqrt(n / 4)), Math.round(NY / 4)));   // 2,400 → 24 lanes; at least 4 cells apart
+  seedParticles();
+}
+
 export function seedParticles() {
+  LANES = Math.max(8, Math.min(Math.round(Math.sqrt(NP / 4)), Math.round(NY / 4)));
   for (let i = 0; i < NP; i++) { px[i] = Math.random() * NX; py[i] = laneY(i); }
 }
 export function moveParticles(n) {
@@ -93,9 +106,12 @@ export function renderFlow() {
   vctx.imageSmoothingEnabled = true;
   vctx.drawImage(fieldCv, 0, 0, W, H);
   if ($('particles').checked) {
-    vctx.fillStyle = 'rgba(255,255,255,0.55)';
+    const alpha = Math.max(0.12, 0.55 * Math.sqrt(DEFAULT_PARTICLES / NP));   // fade dots as there are more of them
+    vctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
     const r = Math.max(1, sx * 0.6);
-    for (let i = 0; i < NP; i++) vctx.fillRect(px[i] * sx, py[i] * sx, r, r);
+    vctx.beginPath();                              // one path for all dots is much faster than fillRect each
+    for (let i = 0; i < NP; i++) vctx.rect(px[i] * sx, py[i] * sx, r, r);
+    vctx.fill();
   }
   vctx.imageSmoothingEnabled = false;
   vctx.globalAlpha = 0.35; vctx.drawImage(mask, 0, 0, W, H); vctx.globalAlpha = 1;

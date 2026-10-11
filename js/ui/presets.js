@@ -30,7 +30,7 @@ function showInfo(p, filled = false) {
 
 // Put the aircraft's real size and cruise speed into the "Will it fly?" inputs (input events save and redraw).
 function fillFly({ span, area, mass, cruise, length }) {
-  const set = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('input')); };
+  const set = (id, v) => { const el = $(id); if (!el) return; el.value = v; el.dispatchEvent(new Event('input')); };
   set('fMass', mass);
   set('fSpan', span);
   set('fChord', +(area / span).toFixed(2));
@@ -51,11 +51,13 @@ export function initPresets() {
   });
 
   // Keep the dropdown in step with the sliders: stay on the chosen preset while it
-  // still matches, otherwise show the first matching preset, or "Custom".
+  // still matches, otherwise show a matching plain NACA preset, or "Custom".
+  // Aircraft are never selected automatically: only an explicit pick should load
+  // their size and speed, and an auto-selected aircraft could not be re-picked to fill them.
   const sync = () => {
     const code = sliderCode(), cur = sel.value ? PRESETS[+sel.value] : null;
     if (cur && matches(cur.naca, code)) return;
-    const i = PRESETS.findIndex(p => matches(p.naca, code));
+    const i = PRESETS.findIndex(p => !p.fly && matches(p.naca, code));
     sel.value = i < 0 ? '' : String(i);
     showInfo(i < 0 ? null : PRESETS[i]);
   };
